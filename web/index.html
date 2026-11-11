@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SuperAgent · 任务中心</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">S</div>
+      <div>
+        <div class="brand-name">SuperAgent</div>
+        <div class="brand-sub">主动式任务中心</div>
+      </div>
+    </div>
+    <nav id="nav">
+      <button data-view="overview" class="nav-item active"><span>总览</span></button>
+      <button data-view="inbox" class="nav-item"><span>Inbox</span><b id="badge-inbox" class="badge">0</b></button>
+      <button data-view="outbox" class="nav-item"><span>Outbox</span><b id="badge-outbox" class="badge danger">0</b></button>
+      <button data-view="tasks" class="nav-item"><span>任务</span><b id="badge-tasks" class="badge">0</b></button>
+      <button data-view="runs" class="nav-item"><span>运行记录</span></button>
+      <button data-view="events" class="nav-item"><span>事件日志</span></button>
+      <button data-view="context" class="nav-item"><span>个人上下文</span></button>
+      <button data-view="collectors" class="nav-item"><span>采集器</span></button>
+    </nav>
+    <div class="side-foot">
+      <div class="health"><span id="health-dot" class="dot"></span><span id="health-text">连接中…</span></div>
+      <div class="muted small" id="version-text"></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="view-title">总览</h1>
+        <div class="muted small" id="view-sub">正在加载…</div>
+      </div>
+      <div class="top-actions">
+        <button id="btn-patrol" class="btn primary">立即巡检</button>
+        <button id="btn-refresh" class="btn">刷新</button>
+      </div>
+    </header>
+
+    <section id="view-overview" class="view active"></section>
+    <section id="view-inbox" class="view"></section>
+    <section id="view-outbox" class="view"></section>
+    <section id="view-tasks" class="view"></section>
+    <section id="view-runs" class="view"></section>
+    <section id="view-events" class="view"></section>
+    <section id="view-context" class="view"></section>
+    <section id="view-collectors" class="view"></section>
+  </main>
+</div>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="modal-title">详情</h2>
+      <button id="modal-close" class="icon-btn">×</button>
+    </div>
+    <div id="modal-body" class="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="/app.js"></script>
+</body>
+</html>

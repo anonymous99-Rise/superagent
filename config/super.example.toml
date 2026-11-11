@@ -1,0 +1,68 @@
+# Copy to config/super.toml and adjust paths for the current machine.
+[core]
+data_dir = "var"
+db_path = "var/super.db"
+api_host = "127.0.0.1"
+api_port = 8787
+workspace_dir = "D:/devProject"
+
+[patrol]
+enabled = true
+interval_sec = 900
+run_on_start = true
+
+[policy]
+external_requires_approval = true
+destructive_requires_approval = true
+max_parallel_tasks = 3
+auto_plan = true
+auto_plan_per_cycle = 2
+auto_run_max_level = 4
+daily_cost_budget_usd = 5.0
+
+[workers.claude]
+enabled = true
+command = "claude"
+
+[workers.codex]
+enabled = true
+command = ""          # auto-detected on Windows
+sandbox = "danger-full-access"
+
+[notify]
+desktop = true
+cooldown_sec = 120
+
+[collectors.filesystem]
+enabled = true
+paths = ["C:/Users/<you>/Desktop", "C:/Users/<you>/Documents"]
+recency_days = 14
+
+[collectors.git]
+enabled = true
+roots = ["D:/devProject"]
+
+[collectors.github]
+enabled = true
+
+[collectors.zotero]
+enabled = true
+db_path = "C:/Users/<you>/Zotero/zotero.sqlite"
+
+[collectors.dsh]
+enabled = true
+home = "C:/Users/<you>/.dsh"
+
+[collectors.obsidian]
+enabled = true
+vault = "C:/Users/<you>/Documents/Obsidian Vault"
+
+[collectors.calendar]
+enabled = false
+paths = ["C:/Users/<you>/Desktop"]
+
+[collectors.email]
+enabled = false
+host = ""
+username = ""
+password_env = "SUPER_EMAIL_PASSWORD"

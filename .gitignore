@@ -1,0 +1,23 @@
+# runtime data
+var/
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# local config with machine-specific paths/secrets
+config/super.toml
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# os
+Thumbs.db
+desktop.ini
+
+# personal profile written by the user
+config/profile.md

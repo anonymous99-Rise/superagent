@@ -1,0 +1,3 @@
+# Core requires only the Python standard library (3.11+).
+# Optional: read DSH session history (.jsonl.zstd)
+zstandard>=0.22
