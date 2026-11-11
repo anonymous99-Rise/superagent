@@ -30,6 +30,13 @@ enabled = true
 command = ""          # auto-detected on Windows
 sandbox = "danger-full-access"
 
+[workers.deeptutor]
+enabled = true
+command = "deeptutor" # DeepTutor CLI launcher on PATH
+language = "zh"
+capability = "auto"   # auto | chat | deep_research | deep_question | ...
+client_url = "http://127.0.0.1:18801"
+
 [notify]
 desktop = true
 cooldown_sec = 120

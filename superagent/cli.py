@@ -158,6 +158,14 @@ def cmd_doctor(args) -> int:
         print(f"worker {name:<7} {'OK' if ok else 'NO'}  {reason}")
         if name != "local" and not ok:
             problems.append(f"worker {name}: {reason}")
+    dt = WORKERS["deeptutor"](cfg)
+    if dt.available()[0]:
+        dok, ddetail = dt.doctor()
+        print(f"deeptutor doctor {'OK' if dok else 'NO'}  {ddetail}")
+        if not dok:
+            problems.append(f"deeptutor doctor: {ddetail}")
+        cok, cdetail = dt.client_available()
+        print(f"deeptutor client {'OK' if cok else 'NO'}  {cdetail}")
     from .collectors import ALL
 
     for cls in ALL:

@@ -50,6 +50,15 @@ DEFAULTS: dict = {
             "timeout_sec": 900,
             "model": "",
         },
+        "deeptutor": {
+            "enabled": True,
+            "command": "deeptutor",
+            "extra_args": [],
+            "timeout_sec": 600,
+            "language": "zh",
+            "capability": "auto",
+            "client_url": "http://127.0.0.1:18801",
+        },
     },
     "notify": {
         "desktop": True,
@@ -225,6 +234,13 @@ command = "claude"
 enabled = true
 # command auto-detected when empty
 command = ""
+
+[workers.deeptutor]
+enabled = true
+command = "deeptutor"
+language = "zh"
+capability = "auto"
+client_url = "http://127.0.0.1:18801"
 
 [notify]
 desktop = true

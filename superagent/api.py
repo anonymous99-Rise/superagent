@@ -46,10 +46,17 @@ class App:
         item = self.store.get_item(item_id)
         if not item:
             raise KeyError("item not found")
+        artifacts = self.store.artifacts(item_id=item_id)
+        answer = ""
+        for a in artifacts:
+            if a.get("path") and Path(a["path"]).name == "answer.md":
+                answer = util.read_text(Path(a["path"]), limit=60_000)
+                break
         return {
             "item": item,
             "tasks": self.store.tasks(item_id=item_id),
-            "artifacts": self.store.artifacts(item_id=item_id),
+            "artifacts": artifacts,
+            "answer": answer,
             "approvals": [a for a in self.store.approvals(limit=300) if a.get("item_id") == item_id],
             "events": self.store.events(limit=100, entity_id=item_id),
         }
@@ -245,6 +252,25 @@ def make_handler(app: App):
                 res = e.digest.build(force=True, notify=bool(body.get("notify", True)))
                 res = {k: v for k, v in res.items() if k != "markdown"}
                 return self._json({"ok": True, "data": res})
+            if path == "/api/ask":
+                question = str(body.get("question") or "").strip()
+                if not question:
+                    return self._err(400, "question is required")
+                from .workers import get_worker
+                cls = get_worker("deeptutor")
+                ok, reason = cls(e.cfg).available() if cls else (False, "worker missing")
+                if not ok:
+                    return self._err(503, f"DeepTutor unavailable: {reason}")
+                iid = s.create_item(
+                    title=question[:200], summary="由看板发起的 DeepTutor 提问",
+                    category="learning", priority=2, autonomy_level=3,
+                    why_now="看板提问", recommendation="DeepTutor 解答",
+                    meta={"source": "dashboard", "kind": "manual", "side_effect": "local"},
+                )
+                s.log("info", "item.ask", question[:200], actor="user",
+                      entity_type="item", entity_id=iid)
+                ids = e.run_item(iid)
+                return self._json({"ok": True, "data": {"item_id": iid, "task_ids": ids}})
             m = re.fullmatch(r"/api/items/([^/]+)/plan", path)
             if m:
                 ids = e.plan_item(m.group(1), use_llm=bool(body.get("use_llm")))
@@ -290,7 +316,7 @@ def make_handler(app: App):
 def serve(engine, host: str | None = None, port: int | None = None) -> ThreadingHTTPServer:
     app = App(engine)
     host = host or engine.cfg.get("core.api_host", "127.0.0.1")
-    port = int(port or engine.cfg.get("core.api_port", 8787))
+    port = int(port if port is not None else engine.cfg.get("core.api_port", 8787))
     httpd = ThreadingHTTPServer((host, port), make_handler(app))
     print(f"SuperAgent dashboard: http://{host}:{port}")
     return httpd

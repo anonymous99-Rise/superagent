@@ -64,6 +64,20 @@
 
 > 更保守的配置：把 `sandbox` 改为 `workspace-write`。无人值守任务仍能写自己的工作目录，但无法改动系统其他位置。
 
+## [workers.deeptutor]
+
+| 键 | 默认 | 说明 |
+| --- | --- | --- |
+| `enabled` | `true` | 是否启用 |
+| `command` | `deeptutor` | CLI 启动器；Windows 下允许 `.cmd` |
+| `language` | `zh` | 回答语言，传给 `-l` |
+| `capability` | `auto` | `auto` 按问题关键词选择；也可固定为 `chat` / `deep_research` / `deep_question` / `deep_solve` / `visualize` / `mastery_path` |
+| `client_url` | `http://127.0.0.1:18801` | 桌面客户端后端地址，仅用于 `doctor` 健康检查；端口随客户端启动可能变化 |
+| `extra_args` | `[]` | 追加参数 |
+| `timeout_sec` | `600` | 单次调用超时 |
+
+DeepTutor 通过 `run <capability> <message> --format json` 调用，解析 JSONL 事件流；最终回答写入事项工作目录的 `answer.md`，并登记为产物。`python -m superagent doctor` 会分别检查 `deeptutor doctor`（模型配置、凭据、runtime）和客户端 `/health`。
+
 ## [notify]
 
 | 键 | 默认 | 说明 |

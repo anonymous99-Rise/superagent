@@ -19,7 +19,8 @@
 | 登录电脑时 | 自动在后台启动 | 什么都不用做 |
 | 每 15 分钟 | 巡检 GitHub、代码仓库、桌面/文档、Zotero、DSH 会话、Obsidian | 有值得处理的事会进 Inbox |
 | 每天 08:00 | 抓取 PubMed / Europe PMC / arXiv，按关键词筛选、去重、排序 | 看推送，感兴趣的点开读 |
-| 随时 | 把事项拆成任务，交给 Claude Code / Codex 执行 | 在 Outbox 批准对外动作 |
+| 随时 | 把事项拆成任务，交给 Claude Code / Codex / DeepTutor 执行 | 在 Outbox 批准对外动作 |
+| 随时 | 看板首页「问 DeepTutor」：讲解概念、出题自测、做文献调研 | 输入问题，等回答出现在事项里 |
 
 推送同时写到两个地方：
 
@@ -27,6 +28,8 @@
 - **Obsidian** → 库 `super建议` → `每日推送/日期.md`
 
 `super建议` 库已经建好并注册到 Obsidian。打开 Obsidian，在库切换里选 `super建议` 就能看到；看板「每日推送」页面里也有「在 Obsidian 打开」按钮。
+
+想弄懂一个概念：在看板首页「问 DeepTutor」里输入问题（例如「讲清楚光系统 I 与光系统 II 的分工，并出两道自测题」），系统会自动建一条学习事项并执行。完成后点开该事项，回答会直接显示在详情里，同时保存为 `answer.md` 产物。也可以直接说「用 DeepTutor 讲解……」或「出一套……自测题」，分诊会把它归到学习任务。
 
 ---
 
@@ -150,10 +153,12 @@ GitHub 仓库搜索（gh api）────┘                              │
                  └────────────────────────────────────┼────────────────────┘
                                                       ▼
                                dispatcher（线程池 / 依赖 / 重试 / 超时）
-                                 ┌────────────┼────────────┐
-                                 ▼            ▼            ▼
-                            Claude Code     Codex       local(校验)
-                                 └────────────┴────────────┘
+                          ┌──────────────┼──────────────┐
+                          ▼              ▼              ▼
+                     Claude Code       Codex        DeepTutor(学习/答疑)
+                          └──────────────┴──────────────┘
+                                         │
+                                    local(校验)
                                           │
                           artifacts / runs / events / approvals
                                           │
@@ -204,7 +209,7 @@ super/
 ├─ superagent/            # Python 包（核心仅依赖标准库）
 │  ├─ collectors/         # 信息源采集器
 │  ├─ sources/            # 论文 / GitHub 仓库 / Skills 抓取
-│  ├─ workers/            # claude / codex / local 执行器
+│  ├─ workers/            # claude / codex / deeptutor / local 执行器
 │  ├─ db.py store.py      # SQLite 持久化与仓储层
 │  ├─ digest.py           # 每日科研推送与 Obsidian 同步
 │  ├─ autonomy.py         # L1–L5 与权限策略
@@ -224,6 +229,7 @@ super/
 - 消息类源（微信/飞书/Slack）需要各自导出或 webhook，当前通过文件与 webhook 预留扩展点。
 - AI 规划默认关闭以控制成本；可在看板中对单条事项点「AI 重新规划」。
 - 长期记忆的语义检索尚未引入向量库，目前用结构化上下文 + 关键词加权。
-- 成本预算只统计 Claude 的美元开销；Codex 仅上报 token 用量，不折算金额。
+- 成本预算统计 Claude 与 DeepTutor 上报的美元开销；Codex 仅上报 token 用量，不折算金额。
+- DeepTutor 需要先启动一次桌面客户端，让 CLI runtime 就绪；`python -m superagent doctor` 会分别检查 CLI 与客户端。
 
 </details>

@@ -201,13 +201,22 @@ class Dispatcher:
     def _finalize_success(self, task, run_id, res, workspace, started_ts) -> None:
         artifacts = []
         seen = set()
+        if task.get("agent") == "deeptutor" and (res.stdout or "").strip():
+            try:
+                path = Path(workspace) / "answer.md"
+                path.write_text(f"# {task['title']}\n\n{res.stdout.strip()}\n", encoding="utf-8")
+                artifacts.append({"path": str(path), "title": "DeepTutor 回答", "kind": "note"})
+                seen.add(str(path.resolve()).lower())
+            except OSError as e:
+                self.store.log("warn", "artifact.write_failed", str(e),
+                               entity_type="task", entity_id=task["id"])
         for a in res.artifacts or []:
             path = a.get("path") or ""
             key = str(Path(path).resolve()).lower() if path else ""
             if key and key not in seen:
                 seen.add(key)
                 artifacts.append(a)
-        if task.get("agent") in ("claude", "codex"):
+        if task.get("agent") in ("claude", "codex", "deeptutor"):
             try:
                 cls = get_worker(task["agent"])
                 detected = cls(self.cfg).detect_artifacts(workspace, started_ts) if cls else []
@@ -312,7 +321,12 @@ class Dispatcher:
                                    "成果已登记到看板，可查看产物。", force=True)
 
     def _fallback_worker(self, preferred: str):
-        for name in (["codex", "claude"] if preferred == "claude" else ["claude", "codex"]):
+        chains = {
+            "claude": ["codex", "deeptutor"],
+            "codex": ["claude", "deeptutor"],
+            "deeptutor": ["claude", "codex"],
+        }
+        for name in chains.get(preferred, ["claude", "codex"]):
             cls = get_worker(name)
             if cls:
                 w = cls(self.cfg)

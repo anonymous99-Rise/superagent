@@ -101,7 +101,8 @@ JSON 快照用于跨版本迁移与人工查阅，不直接回灌数据库。
 - 单个任务超时 `workers.*.timeout_sec` / 任务自身 `timeout_sec`，超时强杀进程树。
 - 单轮采集有 `SOURCE_CAP` 与 `max_files` 限制，避免一次产生上百事项。
 - 实测成本参考（Claude，2026-11）：文献精读 15–37 turns，约 $0.1–$1.3/任务；起草短回复约 $0.1。
-- **注意**：Codex 只上报 token 用量，未折算美元，因此预算统计只覆盖 Claude；用 Codex 跑长任务时需自行留意额度。
+- **注意**：Codex 只上报 token 用量，未折算美元；Claude 与 DeepTutor 会上报美元成本，预算统计覆盖这两者。用 Codex 跑长任务时需自行留意额度。
+- DeepTutor 单次答疑实测约 $0.001–$0.01（取决于回答长度与工具调用），成本写入 run 的 `usage_json`。
 
 ## 7. 常见问题
 
@@ -119,6 +120,20 @@ JSON 快照用于跨版本迁移与人工查阅，不直接回灌数据库。
 
 正常路径下不会发生；若进程被强杀，重启时 `_repair_orphans()` 会把遗留任务标记为 `failed`（错误：`interrupted (process restart)`），并给出通知。
 若某次运行的 stdout 完整、只是收尾失败，可以用 `python -m superagent` 的日志定位，然后手动 `retry`。
+
+### DeepTutor 报 "not found" 或 doctor 失败
+
+1. 先运行 `python -m superagent doctor`，看两行：
+   - `deeptutor doctor`：检查模型配置、凭据、runtime。失败时先在 Open DeepTutor 桌面端完成一次配置。
+   - `deeptutor client`：检查 `client_url` 的 `/health`。客户端未启动或端口变化时显示 `NO`，不影响 CLI 执行，但需更新 `workers.deeptutor.client_url`。
+2. `deeptutor` 必须在 PATH（`C:\Users\<你>\bin\deeptutor.cmd`），或在 `workers.deeptutor.command` 写绝对路径。
+3. Linux/macOS 上若命令不是 `.cmd`，不要额外套 `cmd.exe`；worker 会按平台选择。
+
+### DeepTutor 任务成功但回答被截断或显示 "unparsed DeepTutor output"
+
+- 输出是 JSONL 事件流，最终回答在最后一条 `result`。worker 从 stdout 尾部读取 4MB，并写入 `var/work/<item_id>/answer.md`。
+- 若日志里出现 rich 文本而不是 JSONL，说明启动器丢掉了 `--format json`；确认 `command` 指向官方 `deeptutor` 启动器，并避免在 `extra_args` 里覆盖输出格式。
+- 提示词中的换行会被压成空格再传给 `.cmd`，因为 `cmd.exe` 会在换行处截断命令行。
 
 ### Codex 拒绝执行
 

@@ -62,6 +62,8 @@ EXTERNAL_WORDS = ["发送", "回复", "提交", "推送", "发布", "邮件", "�
                   "pull request", "reply", "send", "publish", "commit", "push"]
 DESTRUCTIVE_WORDS = ["删除", "清空", "覆盖", "重置", "rm -rf", "reset --hard", "drop table"]
 URGENT_WORDS = ["截止", "deadline", "逾期", "答辩", "开题", "中期", "投稿", "返修", "失败", "failed"]
+LEARNING_WORDS = ["学习", "讲解", "弄懂", "复习", "自测", "练习题", "出题", "掌握路径",
+                  "学习路径", "概念梳理", "推导", "study", "learn", "quiz"]
 
 
 @dataclass
@@ -85,6 +87,10 @@ def detect_side_effect(text: str) -> str:
 def assess(kind: str, title: str, body: str = "", importance: float = 0.4) -> Assessment:
     text = f"{title}\n{body}"
     category = KIND_CATEGORY.get(kind, "admin")
+    low = text.lower()
+    if category == "admin" and kind in ("todo", "obsidian_todo", "dsh_todo"):
+        if any(w in text or w in low for w in LEARNING_WORDS):
+            category = "learning"
     level = KIND_LEVEL.get(kind, 2)
     side = detect_side_effect(text)
     if side != "local":

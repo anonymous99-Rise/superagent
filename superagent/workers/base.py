@@ -16,6 +16,8 @@ JSON_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.S)
 
 class Worker:
     name = "base"
+    stdout_limit = 200_000
+    stdout_from_tail = False
 
     def __init__(self, cfg):
         self.cfg = cfg
@@ -62,7 +64,7 @@ class Worker:
                         p.wait(timeout=15)
                     except Exception:
                         pass
-                    stdout = util.read_text(stdout_path)
+                    stdout = self._read_stdout(stdout_path)
                     stderr = util.read_text(stderr_path)
                     res = self.parse_output(stdout, stderr, 124)
                     res.ok = False
@@ -72,7 +74,7 @@ class Worker:
             return WorkerResult(ok=False, error=f"worker executable not found: {argv[0]}")
         except Exception as e:
             return WorkerResult(ok=False, error=f"{type(e).__name__}: {e}")
-        stdout = util.read_text(stdout_path)
+        stdout = self._read_stdout(stdout_path)
         stderr = util.read_text(stderr_path)
         res = self.parse_output(stdout, stderr, rc)
         res.usage.setdefault("duration_ms", int((time.time() - started) * 1000))
@@ -80,6 +82,11 @@ class Worker:
             res.ok = False
             res.error = res.error or f"exit code {rc}"
         return res
+
+    def _read_stdout(self, path: Path) -> str:
+        if self.stdout_from_tail:
+            return util.read_text_tail(path, self.stdout_limit)
+        return util.read_text(path, self.stdout_limit)
 
     # ---- parsing helpers ----
     def _extract_json(self, text: str) -> dict | None:

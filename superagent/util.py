@@ -67,6 +67,18 @@ def read_text(path: Path, limit: int = 200_000) -> str:
         return ""
 
 
+def read_text_tail(path: Path, limit: int = 200_000) -> str:
+    try:
+        size = path.stat().st_size
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            if size > limit:
+                f.seek(size - limit)
+                f.readline()
+            return f.read()
+    except OSError:
+        return ""
+
+
 def atomic_write(path: Path, data: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")

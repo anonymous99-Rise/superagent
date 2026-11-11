@@ -129,7 +129,7 @@ async function renderOverview() {
     <div class="agent-card">
       <div><span class="dot-mini ${w.available ? "ok" : "bad"}"></span><span class="agent-name">${esc(name)}</span>
         <div class="muted small">${esc(w.available ? "可用" : (w.reason || "不可用"))}</div></div>
-      <span class="pill">${name === "claude" ? "分析/写作" : name === "codex" ? "代码/执行" : "确定性"}</span>
+      <span class="pill">${name === "claude" ? "分析/写作" : name === "codex" ? "代码/执行" : name === "deeptutor" ? "学习/答疑" : "确定性"}</span>
     </div>`).join("");
   const collectors = (d.collectors || []).map((c) => `
     <tr><td>${esc(c.name)}</td>
@@ -141,6 +141,14 @@ async function renderOverview() {
     <div class="grid stats">${cards.map(([l, v, s, cls]) => `
       <div class="card stat"><div class="label">${esc(l)}</div>
         <div class="value ${cls || ""}">${esc(v)}</div><div class="sub">${esc(s)}</div></div>`).join("")}
+    </div>
+    <div class="card section-gap">
+      <div class="section-title" style="margin-top:0">问 DeepTutor</div>
+      <div class="form-row">
+        <input id="ask-q" placeholder="例如：讲清楚光系统 I 与光系统 II 的分工，并出两道自测题" style="flex:1;min-width:320px" />
+        <button class="btn primary" data-action="ask">提问</button>
+      </div>
+      <div class="muted small">DeepTutor 会用中文讲解；完整回答保存为事项产物，可在事项详情里直接查看。</div>
     </div>
     <div class="two-col section-gap">
       <div class="card">
@@ -417,6 +425,7 @@ async function openItem(id) {
       <div class="k">来源</div><div>${esc(meta.source || "")} / ${esc(meta.kind || "")} ${meta.url ? `· <span class="mono small">${esc(meta.url)}</span>` : ""}</div>
       <div class="k">摘要</div><div style="white-space:pre-wrap">${esc(it.summary || "")}</div>
     </div>
+    ${d.answer ? `<div class="section-title">DeepTutor 回答</div><div class="answer-view">${esc(d.answer)}</div>` : ""}
     <div class="form-row">
       <button class="btn small primary" data-action="run" data-id="${esc(it.id)}">执行</button>
       <button class="btn small" data-action="plan" data-id="${esc(it.id)}" data-llm="1">AI 重新规划</button>
@@ -501,7 +510,21 @@ document.addEventListener("click", async (ev) => {
       await api(`/api/approvals/${id}/decision`, { method: "POST", body: { decision: act === "approve" ? "approved" : "rejected" } });
       toast(act === "approve" ? "已批准，任务重新入队" : "已驳回"); await render();
     } else if (act === "patrol-one") { toast("正在巡检 " + el.dataset.source + "…"); await api("/api/patrol", { method: "POST", body: { only: [el.dataset.source] } }); toast("巡检完成"); await render(); }
-    else if (act === "ctx-add") {
+    else if (act === "ask") {
+      const q = $("#ask-q").value.trim();
+      if (!q) return toast("先写下问题", true);
+      el.disabled = true;
+      try {
+        await api("/api/ask", { method: "POST", body: { question: q } });
+        $("#ask-q").value = "";
+        toast("已交给 DeepTutor，回答完成后可在事项里查看");
+        await render();
+      } catch (e) {
+        toast("提问失败：" + (e.message || e), true);
+      } finally {
+        el.disabled = false;
+      }
+    } else if (act === "ctx-add") {
       const category = $("#ctx-cat").value, key = $("#ctx-key").value.trim(), value = $("#ctx-val").value.trim();
       if (!key || !value) return toast("键和值都不能为空", true);
       await api("/api/context", { method: "POST", body: { category, key, value } });

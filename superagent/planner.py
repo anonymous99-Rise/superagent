@@ -34,16 +34,18 @@ PLAN_PROMPT = """你是 SuperAgent 的规划器。请把下面这件事拆解成
 ## 可用执行器
 - claude：擅长阅读、分析、写作、评审、规划；工作目录内可读写。
 - codex：擅长代码修改、运行测试、仓库操作。
+- deeptutor：擅长概念讲解、学习路径、解题推导、出题自测、文献调研与可视化；返回自然语言答案。
 - local：确定性校验，不调用模型。
 
 ## 要求
 - 2~5 个子任务，每个子任务目标单一、可独立验收。
 - 有依赖的用 depends_on 指定前置子任务下标（从 0 开始）。
 - 会产生对外副作用的步骤 side_effect 设为 "external"，否则 "local"。
+- 学习、讲解、练习类步骤优先交给 deeptutor；不要给 deeptutor 安排写代码或改仓库。
 - 不要输出任何解释性文字，只输出 JSON：
 {{"rationale": "一句话说明拆分思路", "subtasks": [
-  {{"title": "...", "kind": "analysis|research|writing|code|review|verify",
-    "agent": "claude|codex|local", "prompt": "给执行器的完整指令（自包含）",
+  {{"title": "...", "kind": "analysis|research|writing|code|review|verify|learning",
+    "agent": "claude|codex|deeptutor|local", "prompt": "给执行器的完整指令（自包含）",
     "depends_on": [], "side_effect": "local", "timeout_sec": 900}}
 ]}}
 """
@@ -115,7 +117,7 @@ class Planner:
                 specs.append(SubtaskSpec(
                     title=str(st.get("title"))[:200],
                     kind=str(st.get("kind", "analysis")),
-                    agent=str(st.get("agent", "claude")) if st.get("agent") in ("claude", "codex", "local") else "claude",
+                    agent=str(st.get("agent", "claude")) if st.get("agent") in ("claude", "codex", "deeptutor", "local") else "claude",
                     prompt=str(st.get("prompt", st.get("title"))),
                     depends_on=[int(i) for i in st.get("depends_on", []) if str(i).isdigit()],
                     side_effect=str(st.get("side_effect", "local")),
@@ -198,6 +200,14 @@ class Planner:
             ]
             return Plan("日程任务：生成会前简报。", specs)
 
+        if cat == "learning":
+            specs = [
+                SubtaskSpec("讲解与自测", "learning", "deeptutor",
+                            f"{base}\n\n请用中文完成这件事：先给核心结论，再分步骤解释关键概念与推理过程，"
+                            "需要时给出例子；最后给 2-3 道自测题（附答案要点）。"),
+            ]
+            return Plan("学习任务：交给 DeepTutor 生成讲解与自测。", specs)
+
         # admin / document / default
         specs = [
             SubtaskSpec("理解并整理", "analysis", "claude",
@@ -217,7 +227,12 @@ class Planner:
         for idx, st in enumerate(plan.subtasks):
             deps = [ids[i] for i in st.depends_on if 0 <= i < len(ids)]
             requires = autonomy.requires_approval(st.side_effect, self.cfg)
-            prompt = f"{st.prompt}\n\n{contract}"
+            if st.agent == "deeptutor":
+                prompt = (f"{st.prompt}\n\n## 执行约束\n"
+                          f"- 用中文直接给出完整答案，不要输出 JSON 包装。\n"
+                          f"- 如需保存文件，写入工作目录：{ws}\n")
+            else:
+                prompt = f"{st.prompt}\n\n{contract}"
             tid = self.store.create_task(
                 item_id=item["id"], title=st.title, kind=st.kind, agent=st.agent,
                 prompt=prompt, depends_on=deps, autonomy_level=item["autonomy_level"],

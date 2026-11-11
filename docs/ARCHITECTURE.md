@@ -14,7 +14,7 @@
 │ 领域层   Triage（分诊/去重/优先级）  autonomy（L1–L5/权限）      │
 │          HITL（Outbox 审批）        Notifier（桌面通知）        │
 ├────────────────────────────────────────────────────────────┤
-│ 执行层   workers/{claude,codex,local}                         │
+│ 执行层   workers/{claude,codex,deeptutor,local}                │
 ├────────────────────────────────────────────────────────────┤
 │ 采集层   collectors/{filesystem,git,github,zotero,dsh,         │
 │            obsidian,calendar,email}                           │
@@ -72,8 +72,9 @@ Engine.patrol_once()
 
 `Planner.plan_item(item_id, use_llm=False)`：
 
-- 模板规划：按 category 选择 DAG（reading 2 步、writing 3 步、coding 3 步…），每一步指定 agent 与 prompt。
+- 模板规划：按 category 选择 DAG（reading 2 步、writing 3 步、coding 3 步、learning 1 步…），每一步指定 agent 与 prompt。
 - LLM 规划：调用 Claude 输出 JSON 计划，失败自动回退模板。
+- learning 分类交给 DeepTutor，使用自然语言指令而不是 Claude/Codex 的 JSON 输出契约。
 - 物化：为每个任务建 `var/work/<item_id>/` 工作目录，写入 `depends_on`，item 置为 `planned`。
 - 幂等：已有任务的事项再次规划直接返回原任务 ID。
 

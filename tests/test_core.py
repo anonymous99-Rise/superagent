@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from superagent import autonomy
+from superagent import autonomy, util
 from superagent.config import Config
 from superagent.digest import Digest
 from superagent.engine import Engine
@@ -36,6 +36,15 @@ def make_cfg(tmp: str) -> Config:
     cfg.set("collectors.calendar.enabled", False)
     cfg.set("collectors.email.enabled", False)
     return cfg
+
+
+class UtilTests(unittest.TestCase):
+    def test_read_text_tail_returns_end_of_large_log(self):
+        p = Path(tempfile.mkdtemp()) / "x.log"
+        p.write_text("a" * 300_000 + "\nEND", encoding="utf-8")
+        tail = util.read_text_tail(p, 1000)
+        self.assertTrue(tail.endswith("END"))
+        self.assertLess(len(tail), 1100)
 
 
 class StoreTests(unittest.TestCase):
@@ -79,6 +88,12 @@ class AutonomyTests(unittest.TestCase):
         self.assertEqual(b.level, 4)
         self.assertIn(b.side_effect, ("external", "destructive"))
         self.assertEqual(b.priority, 1)
+
+    def test_learning_todo_is_classified_for_deeptutor(self):
+        a = autonomy.assess("todo", "学习 DeepTutor 的 RAG 原理", "", 0.4)
+        self.assertEqual(a.category, "learning")
+        b = autonomy.assess("todo", "整理报销单据", "", 0.4)
+        self.assertEqual(b.category, "admin")
 
     def test_autorun_policy(self):
         cfg = Config()
@@ -125,6 +140,16 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(json.loads(tasks[2]["depends_on"]), [ids[1]])
         self.assertTrue(Path(tasks[0]["workspace"]).exists())
 
+    def test_learning_item_is_planned_for_deeptutor_without_json_contract(self):
+        iid = self.store.create_item(title="弄懂光系统 I 的电子传递", summary="", category="learning",
+                                     priority=2, autonomy_level=3)
+        ids = Planner(self.store, self.cfg).plan_item(iid, use_llm=False)
+        self.assertEqual(len(ids), 1)
+        task = self.store.get_task(ids[0])
+        self.assertEqual(task["agent"], "deeptutor")
+        self.assertIn("工作目录", task["prompt"])
+        self.assertNotIn("最终回复必须是且仅是一个 JSON", task["prompt"])
+
     def test_plan_is_idempotent(self):
         iid = self.store.create_item(title="x", summary="", category="admin")
         p = Planner(self.store, self.cfg)
@@ -155,6 +180,67 @@ class WorkerArgvTests(unittest.TestCase):
         self.assertIn("-s", argv)
         self.assertIn("workspace-write", argv)
         self.assertNotIn("--dangerously-bypass-approvals-and-sandbox", argv)
+
+
+class DeepTutorWorkerTests(unittest.TestCase):
+    def _worker(self):
+        from superagent.workers.deeptutor import DeepTutorWorker
+
+        cfg = Config()
+        cfg.set("workers.deeptutor.command", "C:/fake/deeptutor.cmd")
+        return DeepTutorWorker(cfg)
+
+    def test_capability_auto_inference_and_forced_mode(self):
+        w = self._worker()
+        self.assertEqual(w.capability("帮我做一份文献综述"), "deep_research")
+        self.assertEqual(w.capability("解释一下光合作用"), "chat")
+        self.assertEqual(w.capability("出一套自测题"), "deep_question")
+        w.cfg.set("workers.deeptutor.capability", "deep_solve")
+        self.assertEqual(w.capability("解释一下光合作用"), "deep_solve")
+
+    def test_build_argv_uses_agent_run_with_json_stream(self):
+        argv = self._worker().build_argv("讲解光系统", "C:/ws")
+        self.assertIn("run", argv)
+        self.assertIn("chat", argv)
+        self.assertIn("--format", argv)
+        self.assertIn("json", argv)
+        self.assertIn("zh", argv)
+        self.assertIn("讲解光系统", argv)
+
+    def test_multiline_prompt_is_flattened_for_cmd_launcher(self):
+        argv = self._worker().build_argv("第一行\n第二行\r\n第三行", "C:/ws")
+        self.assertIn("第一行 第二行 第三行", argv)
+        self.assertFalse(any("\n" in str(a) for a in argv))
+
+    def test_parse_jsonl_result_with_cost_and_session(self):
+        lines = [
+            {"type": "session", "session_id": "sess-1"},
+            {"type": "content", "stage": "responding",
+             "metadata": {"trace_kind": "llm_chunk"}, "content": "光合作用"},
+            {"type": "content", "stage": "responding",
+             "metadata": {"trace_kind": "llm_chunk"}, "content": "分为两步。"},
+            {"type": "result", "session_id": "sess-1", "metadata": {
+                "response": "光合作用分为光反应和暗反应。", "completed": True, "rounds": 2,
+                "metadata": {"cost_summary": {"total_cost_usd": 0.0012, "total_tokens": 100,
+                                              "prompt_tokens": 80, "completion_tokens": 20},
+                             "usage_summary": {}}}},
+            {"type": "done", "metadata": {"usage_summary": {
+                "total_tokens": 100, "prompt_tokens": 80, "completion_tokens": 20}}},
+        ]
+        stdout = "\n".join(json.dumps(x, ensure_ascii=False) for x in lines)
+        res = self._worker().parse_output(stdout, "", 0)
+        self.assertTrue(res.ok)
+        self.assertIn("光反应", res.summary)
+        self.assertAlmostEqual(res.usage["cost_usd"], 0.0012)
+        self.assertEqual(res.usage["session_id"], "sess-1")
+        self.assertEqual(res.usage["num_turns"], 2)
+        self.assertEqual(res.usage["total_tokens"], 100)
+
+    def test_parse_error_event_without_answer_fails(self):
+        stdout = json.dumps({"type": "error", "content": "LLM auth failed"})
+        res = self._worker().parse_output(stdout, "", 1)
+        self.assertFalse(res.ok)
+        self.assertIn("LLM auth failed", res.error)
 
 
 class DispatcherTests(unittest.TestCase):
@@ -212,6 +298,25 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(len(arts), 1, arts)
         self.assertEqual(len(self.store.approvals(status="pending")), 1)
         self.assertEqual(self.store.get_item(iid)["status"], "needs_approval")
+
+    def test_deeptutor_full_answer_is_saved_as_artifact(self):
+        from superagent.models import WorkerResult
+
+        iid = self.store.create_item(title="x", summary="", category="learning", autonomy_level=3)
+        tid = self.store.create_task(item_id=iid, title="讲解光系统", kind="learning",
+                                     agent="deeptutor", prompt="p")
+        ws = Path(self.tmp) / "ws_dt"
+        ws.mkdir()
+        res = WorkerResult(ok=True, summary="短摘要", stdout="# 核心结论\n\n完整讲解内容。")
+        self.engine.dispatcher._finalize_success(
+            self.store.get_task(tid), "run_dt", res, str(ws), time.time() - 1)
+        answer = ws / "answer.md"
+        self.assertTrue(answer.exists())
+        text = answer.read_text(encoding="utf-8")
+        self.assertIn("# 讲解光系统", text)
+        self.assertIn("完整讲解内容。", text)
+        arts = self.store.artifacts(item_id=iid)
+        self.assertTrue(any(a["path"] == str(answer) for a in arts), arts)
 
     def test_auto_plan_pauses_when_backlog_full(self):
         self.cfg.set("policy.auto_plan", True)
@@ -324,6 +429,53 @@ class DigestTests(unittest.TestCase):
 
 
 class ApiTests(unittest.TestCase):
+    def test_item_detail_includes_deeptutor_answer(self):
+        from superagent.api import App
+
+        tmp = tempfile.mkdtemp()
+        engine = Engine(make_cfg(tmp))
+        iid = engine.store.create_item(title="讲解光系统", summary="", category="learning")
+        ws = Path(tmp) / "ws"
+        ws.mkdir()
+        answer = ws / "answer.md"
+        answer.write_text("# 讲解光系统\n\n完整讲解内容。", encoding="utf-8")
+        engine.store.add_artifact(item_id=iid, kind="note", title="DeepTutor 回答",
+                                  path=str(answer))
+        detail = App(engine).item_detail(iid)
+        self.assertIn("完整讲解内容", detail["answer"])
+        engine.shutdown()
+
+    def test_ask_endpoint_creates_learning_item(self):
+        import urllib.request
+        from superagent.api import serve
+
+        tmp = tempfile.mkdtemp()
+        engine = Engine(make_cfg(tmp))
+        engine.run_item = lambda item_id, use_llm=False: []
+        httpd = serve(engine, host="127.0.0.1", port=0)
+        port = httpd.server_address[1]
+        th = threading.Thread(target=httpd.serve_forever, daemon=True)
+        th.start()
+        try:
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/ask",
+                data=json.dumps({"question": "讲解光系统 I 的电子传递"}).encode(),
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            with patch("superagent.workers.deeptutor.DeepTutorWorker.available",
+                       return_value=(True, "")):
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    data = json.loads(r.read().decode())
+            self.assertTrue(data["ok"])
+            item = engine.store.get_item(data["data"]["item_id"])
+            self.assertEqual(item["category"], "learning")
+            self.assertEqual(item["autonomy_level"], 3)
+            meta = json.loads(item["meta_json"])
+            self.assertEqual(meta["source"], "dashboard")
+        finally:
+            httpd.shutdown()
+            engine.shutdown()
+
     def test_health_and_items(self):
         import urllib.request
         from superagent.api import serve
