@@ -2,6 +2,12 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $py = (Get-Command python -ErrorAction SilentlyContinue).Source
+if (-not $py) {
+  # Scheduled tasks start with a minimal PATH; fall back to the per-user install.
+  $py = Get-ChildItem (Join-Path $env:LOCALAPPDATA "Programs\Python\Python3*\python.exe") `
+    -ErrorAction SilentlyContinue | Sort-Object FullName -Descending |
+    Select-Object -First 1 -ExpandProperty FullName
+}
 if (-not $py) { throw "python not found in PATH" }
 
 $logDir = Join-Path $root "var\logs"

@@ -54,6 +54,16 @@ class App:
             "events": self.store.events(limit=100, entity_id=item_id),
         }
 
+    def digest_view(self, date_str: str = "") -> dict:
+        rec = self.store.get_digest(date_str)
+        if not rec:
+            return {"exists": False, "date": date_str}
+        stats = util.json_loads(rec.get("stats_json"), {}) or {}
+        content = util.read_text(Path(rec["path"])) if rec.get("path") else ""
+        item = self.store.get_item(rec["item_id"]) if rec.get("item_id") else None
+        return {"exists": True, "digest": rec, "stats": stats, "markdown": content,
+                "item": item}
+
     def run_logs(self, run_id: str) -> dict:
         run = self.store.get_run(run_id)
         if not run:
@@ -212,12 +222,16 @@ def make_handler(app: App):
                 return self._json({"ok": True, "data": s.context()})
             if path == "/api/collectors":
                 return self._json({"ok": True, "data": s.all_collector_states()})
+            if path == "/api/digest":
+                return self._json({"ok": True, "data": app.digest_view(one("date", "") or "")})
+            if path == "/api/digests":
+                return self._json({"ok": True, "data": s.digests(limit=int(one("limit", 30)))})
             if path == "/api/export":
                 return self._json({"ok": True, "data": {
                     "exported_at": util.utcnow(),
                     "items": s.items(limit=10000), "tasks": s.tasks(limit=10000),
                     "approvals": s.approvals(limit=10000), "artifacts": s.artifacts(limit=10000),
-                    "context": s.context(),
+                    "context": s.context(), "digests": s.digests(limit=1000),
                 }})
             return self._err(404, "unknown endpoint")
 
@@ -227,6 +241,10 @@ def make_handler(app: App):
             if path == "/api/patrol":
                 only = body.get("only") or None
                 return self._json({"ok": True, "data": e.patrol_once(only=only)})
+            if path == "/api/digest/run":
+                res = e.digest.build(force=True, notify=bool(body.get("notify", True)))
+                res = {k: v for k, v in res.items() if k != "markdown"}
+                return self._json({"ok": True, "data": res})
             m = re.fullmatch(r"/api/items/([^/]+)/plan", path)
             if m:
                 ids = e.plan_item(m.group(1), use_llm=bool(body.get("use_llm")))

@@ -38,6 +38,8 @@
 | `events` | ts, level, action, message, actor, entity_type, entity_id | 审计日志 |
 | `context` | category, key, value, confidence, source | 个人上下文事实 |
 | `collector_state` | name, last_run_at, last_ok_at, cursor_json, error, stats_json | 采集器游标与健康状态 |
+| `digests` | date, item_id, path, stats_json | 每日推送记录；Markdown 位于 `var/digests/YYYY-MM-DD.md` |
+| `digest_seen` | kind, key, first_seen, last_seen, hits | 跨天去重：论文按 DOI/标题、仓库按 `owner/name`、技能按名称 |
 
 状态机：
 
@@ -112,6 +114,19 @@ class Worker:
 - 看板 Outbox 展示背景、建议、可执行选项、风险级别。
 - 批准：任务回到 `pending` 继续执行；驳回：任务 `canceled`。
 - Agent 被明确要求：**不得直接发送/提交/推送/发布**，只能把动作写进 `actions`。
+
+### 3.6 每日科研推送
+
+`Digest`（`superagent/digest.py`）由独立的 `digest-loop` 每 60 秒检查是否到达 `digest.time`：
+
+1. **论文**：并行请求 PubMed E-utilities、Europe PMC、arXiv；标题/摘要按关键词打分（ASCII 关键词带词边界，避免 `photosystem I` 误中 `photosystem II`），合并 DOI/标题去重，按 `max_per_source` 保证来源多样性。
+2. **Skills**：扫描 `digest.skill_dirs` 下的 `SKILL.md`，按课题词 + 科研能力词打分；按名称前缀轮转，避免同一天全推同一套技能。GitHub 技能仓库单独检索，要求元数据命中科研词。
+3. **GitHub 仓库**：`gh api search/repositories` 并行查询，过滤低星、归档、长期未更新与不合规内容，按“关键词命中数 × 6 + 星标 + 近期活跃”排序。
+4. **输出**：写 `var/digests/YYYY-MM-DD.md`，创建 `category=digest` 的 Inbox 事项与 artifact，发 Windows 通知；当天旧推送事项自动归档。
+5. **Obsidian 同步**：同一份正文写入 `digest.obsidian_vault/每日推送/YYYY-MM-DD.md`，带 frontmatter 与 `[[首页]]` 反向链接；`首页.md` 维护最近 60 天的推送索引。同步失败只记 `digest.obsidian_failed` 事件，不影响推送本身。
+6. **去重**：选中的论文/仓库永久不重复；本地 Skills 有 14 天冷却。手动重建当天推送时只清除最近 24 小时的 seen 标记，避免把昨天的推荐重新推一遍。
+
+整个过程不调用任何 LLM，`cost_usd = 0`。数据源失败会写入 Markdown 的“数据源异常”与 `digest.created` 事件，不影响其他源。
 
 ## 4. 自主等级与权限
 

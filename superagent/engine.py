@@ -7,6 +7,7 @@ import time
 from . import autonomy, util
 from .collectors import ALL
 from .context import Context
+from .digest import Digest
 from .dispatcher import Dispatcher
 from .hitl import HITL
 from .notify import Notifier
@@ -24,6 +25,7 @@ class Engine:
         self.context = Context(self.store, cfg)
         self.planner = Planner(self.store, cfg, self.context)
         self.dispatcher = Dispatcher(self.store, cfg, self.hitl, self.notifier)
+        self.digest = Digest(self.store, cfg, self.context, self.notifier)
         self._stop = threading.Event()
         self._patrol_lock = threading.Lock()
         self._threads: list[threading.Thread] = []
@@ -128,7 +130,11 @@ class Engine:
             t2 = threading.Thread(target=self._patrol_loop, name="patrol-loop", daemon=True)
             t2.start()
             self._threads.append(t2)
-        self.store.log("info", "engine.background_started", "后台巡检与调度已启动")
+        if bool(self.cfg.get("digest.enabled", True)):
+            t3 = threading.Thread(target=self._digest_loop, name="digest-loop", daemon=True)
+            t3.start()
+            self._threads.append(t3)
+        self.store.log("info", "engine.background_started", "后台巡检、调度与每日推送已启动")
 
     def _dispatch_loop(self) -> None:
         while not self._stop.is_set():
@@ -154,6 +160,15 @@ class Engine:
                 self.patrol_once()
             except Exception as e:
                 self.store.log("error", "patrol.failed", str(e))
+
+    def _digest_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                if self.digest.due():
+                    self.digest.build()
+            except Exception as e:
+                self.store.log("error", "digest.failed", str(e), actor="digest")
+            self._stop.wait(60)
 
     def shutdown(self) -> None:
         self._stop.set()

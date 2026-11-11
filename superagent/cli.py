@@ -132,6 +132,18 @@ def cmd_add(args) -> int:
     return 0
 
 
+def cmd_digest(args) -> int:
+    e = _engine(Config())
+    res = e.digest.build(force=args.force, notify=not args.no_notify)
+    slim = {k: v for k, v in res.items() if k != "markdown"}
+    print(json.dumps(slim, ensure_ascii=False, indent=2))
+    if res.get("markdown") and not args.show:
+        print(f"\nmarkdown: {res.get('path')}")
+    if args.show and res.get("markdown"):
+        print(res["markdown"])
+    return 0
+
+
 def cmd_doctor(args) -> int:
     cfg = Config()
     e = _engine(cfg)
@@ -157,6 +169,8 @@ def cmd_doctor(args) -> int:
     n = Notifier(e.store, cfg)
     ok = n._toast("SuperAgent 自检", "通知通道工作正常") if n.enabled() else False
     print(f"notify desktop {'OK' if ok else 'NO'}")
+    print(f"digest {'ON' if cfg.get('digest.enabled', True) else 'OFF'} "
+          f"at {cfg.get('digest.time', '08:00')} · sources {', '.join(cfg.get('digest.sources') or [])}")
     print(f"context entries: {len(e.store.context())}")
     print("problems:", problems or "none")
     return 1 if problems else 0
@@ -230,6 +244,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="print JSON status").set_defaults(func=cmd_status)
     sub.add_parser("doctor", help="self-check environment").set_defaults(func=cmd_doctor)
+
+    sp = sub.add_parser("digest", help="generate the daily paper/skill/repo digest")
+    sp.add_argument("--force", action="store_true", help="regenerate even if today's digest exists")
+    sp.add_argument("--no-notify", action="store_true", help="skip the desktop notification")
+    sp.add_argument("--show", action="store_true", help="print the markdown to stdout")
+    sp.set_defaults(func=cmd_digest)
 
     sp = sub.add_parser("items", help="list inbox items")
     sp.add_argument("--status", default="")

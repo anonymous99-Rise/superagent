@@ -6,12 +6,17 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def utc_before(days: float) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(
+        timespec="seconds").replace("+00:00", "Z")
 
 
 def new_id(prefix: str) -> str:

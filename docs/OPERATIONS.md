@@ -47,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1
 powershell -ExecutionPolicy Bypass -File scripts\uninstall-autostart.ps1
 ```
 
-注册的是**当前用户**的计划任务 `SuperAgent`，登录时触发，失败重试 3 次。卸载脚本会删除该任务。
+注册的是**当前用户**的计划任务 `SuperAgent`，登录时触发，失败重试 3 次；同时在桌面写入「SuperAgent 看板」快捷方式（指向 `http://127.0.0.1:8787`）。卸载脚本只删除计划任务，不删桌面快捷方式。
 
 ### 前台运行（调试）
 
@@ -62,6 +62,7 @@ python -m superagent serve --port 8787
 | 页面 | 用途 |
 | --- | --- |
 | 总览 | 事项/任务/审批/成本/采集器健康、Worker 可用性 |
+| 每日推送 | 当天论文/Skills/仓库推荐，可回看历史日期或手动重新生成 |
 | Inbox | 分诊后的事项，可按状态筛选；可规划、执行、归档 |
 | Outbox | 待确认的对外/破坏性动作；批准或驳回，可写备注 |
 | 任务 | 所有子任务与状态；可重试、取消、查看运行日志 |
@@ -79,6 +80,8 @@ python -m superagent serve --port 8787
 | `var/super.db` | 全部状态（SQLite WAL） | 否 |
 | `var/runs/<run_id>/` | 每次运行的 stdout/stderr | 否 |
 | `var/work/<item_id>/` | 任务产物 | 否 |
+| `var/digests/YYYY-MM-DD.md` | 每日科研推送正文 | 否 |
+| `D:/devProject/super建议/每日推送/` | 同步给 Obsidian 的推送副本与 `首页.md` 索引 | 否 |
 | `var/backups/` | JSON 快照 | 否 |
 | `config/super.toml` | 本机配置（含绝对路径） | 否 |
 | `config/profile.md` | 个人档案（含个人信息） | 否；仅 `profile.example.md` 入库 |
@@ -139,6 +142,14 @@ python -m pip install zstandard
 - 检查 Windows 通知设置是否允许 PowerShell 发送通知。
 - 检查 `notify.desktop = true`、`notify.min_priority` 与冷却时间。
 - 手动验证：`python -m superagent doctor` 会尝试发送一条测试通知。
+
+### 每日推送没有生成 / 内容为空
+
+- 检查 `digest.enabled = true`、`digest.time` 是否已到；后台循环每 60 秒检查一次，生成约需 15–40 秒。
+- 手动执行 `python -m superagent digest --force --show` 查看各数据源错误（PubMed / Europe PMC / arXiv / `gh`）。
+- 若昨天已推过同样的论文/仓库，会被 `digest_seen` 去重；当天手动“重新生成”会保留当天已选内容，只补充新内容。
+- GitHub 相关为空时先运行 `gh auth status`；技能仓库需要元数据命中科研词，过度冷门的主题可能当天没有结果。
+- Obsidian 里没有当天笔记：确认 `digest.obsidian_sync = true`、`obsidian_vault` 路径存在；同步失败会记 `digest.obsidian_failed` 事件但不会影响看板推送。库没有出现在 Obsidian 库列表时，重新把该路径注册进 `%APPDATA%\obsidian\obsidian.json`（修改前先备份）。
 
 ### 端口被占用
 

@@ -34,6 +34,39 @@ sandbox = "danger-full-access"
 desktop = true
 cooldown_sec = 120
 
+[digest]
+enabled = true
+time = "08:00"
+notify = true
+lookback_days = 7
+max_papers = 8
+max_per_source = 4
+min_paper_score = 3.0
+sources = ["pubmed", "europepmc", "arxiv"]
+keywords = [
+  "photosystem I", "PsaE", "photosystem II", "cyanobacteria", "Synechocystis",
+  "chloroplast", "plastid genome", "photosynthesis", "phylogenomics", "ycf51",
+  "plastid annotation",
+]
+max_skills = 4
+skill_cooldown_days = 14
+skill_dirs = ["~/.dsh/skills", "~/.dsh/vendor", "~/.claude/skills"]
+max_github_skills = 2
+github_skills_queries = ["topic:claude-skills academic", "topic:claude-skills research"]
+github_skills_min_stars = 20
+github_skills_keywords = ["research", "academic", "scholar", "science", "phd", "literature", "bioinformatics", "laboratory", "manuscript", "citation"]
+max_repos = 5
+min_repo_stars = 10
+repo_max_age_days = 730
+repo_queries = [
+  "cyanobacteria", "photosystem", "plastid genome", "chloroplast genome",
+  "phylogenetics", "molecular evolution", "bioinformatics pipeline",
+]
+exclude_users = []
+blocked_repo_terms = ["z-library", "shadow library", "影子图书馆", "piracy", "盗版"]
+obsidian_sync = true
+obsidian_vault = "D:/devProject/super建议"
+
 [collectors.filesystem]
 enabled = true
 paths = ["C:/Users/<you>/Desktop", "C:/Users/<you>/Documents"]

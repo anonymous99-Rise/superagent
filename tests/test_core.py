@@ -5,13 +5,17 @@ import tempfile
 import threading
 import time
 import unittest
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from superagent import autonomy
 from superagent.config import Config
+from superagent.digest import Digest
 from superagent.engine import Engine
 from superagent.models import Signal
 from superagent.planner import Planner
+from superagent.sources import papers as paper_sources
 from superagent.store import Store
 from superagent.triage import Triage
 
@@ -22,6 +26,7 @@ def make_cfg(tmp: str) -> Config:
     cfg.set("core.db_path", str(Path(tmp) / "test.db"))
     cfg.set("policy.auto_plan", False)
     cfg.set("notify.desktop", False)
+    cfg.set("digest.obsidian_sync", False)
     cfg.set("collectors.filesystem.enabled", False)
     cfg.set("collectors.git.enabled", False)
     cfg.set("collectors.github.enabled", False)
@@ -237,6 +242,87 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(self.store.get_task(tid)["status"], "pending")
 
 
+class DigestTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.cfg = make_cfg(self.tmp)
+        self.cfg.set("digest.sources", ["pubmed"])
+        self.cfg.set("digest.repo_queries", [])
+        self.cfg.set("digest.github_skills_queries", [])
+        self.cfg.set("digest.skill_dirs", [])
+        self.cfg.set("digest.notify", False)
+        self.cfg.set("digest.time", "00:00")
+        self.store = Store(Path(self.tmp) / "t.db")
+        self.digest = Digest(self.store, self.cfg)
+
+    def _fake(self, keywords, days=7, limit=40, timeout=30):
+        return [{
+            "source": "pubmed", "source_id": "1",
+            "key": "doi:10.1000/test",
+            "title": "Photosystem I structure in Synechocystis",
+            "abstract": "Photosystem I and cyanobacteria light adaptation.",
+            "journal": "Test Journal",
+            "published": date.today().isoformat(),
+            "doi": "10.1000/test", "authors": [], "url": "https://example.org/p",
+        }]
+
+    def test_seen_dedupe_and_clear(self):
+        self.store.mark_digest_seen("paper", "doi:x")
+        self.assertTrue(self.store.digest_seen("paper", "doi:x"))
+        self.assertTrue(self.store.digest_seen("paper", "doi:x", cooldown_days=14))
+        self.store.clear_recent_digest_seen(days=1)
+        self.assertFalse(self.store.digest_seen("paper", "doi:x"))
+
+    def test_due_respects_time_and_existing_record(self):
+        self.assertTrue(self.digest.due(datetime.now()))
+        self.store.record_digest(date.today().isoformat(), "", "", {})
+        self.assertFalse(self.digest.due(datetime.now()))
+
+    def test_build_creates_item_artifact_and_rerun_is_idempotent(self):
+        with patch.dict(paper_sources.FETCHERS, {"pubmed": self._fake}, clear=True):
+            first = self.digest.build(force=True, notify=False)
+            self.assertEqual(first["counts"]["papers"], 1)
+            self.assertTrue(first["item_id"])
+            self.assertTrue(Path(first["path"]).exists())
+            md = Path(first["path"]).read_text(encoding="utf-8")
+            self.assertIn("Photosystem I structure", md)
+            self.assertIn("Test Journal", md)
+
+            second = self.digest.build(force=True, notify=False)
+            self.assertEqual(second["item_id"], first["item_id"])
+            self.assertEqual(second["counts"]["papers"], 1)
+
+        self.assertEqual(len(self.store.items(category="digest", limit=10)), 1)
+        self.assertEqual(len(self.store.artifacts(item_id=first["item_id"])), 1)
+
+    def test_build_syncs_to_obsidian_vault(self):
+        vault = Path(self.tmp) / "vault"
+        self.cfg.set("digest.obsidian_sync", True)
+        self.cfg.set("digest.obsidian_vault", str(vault))
+        with patch.dict(paper_sources.FETCHERS, {"pubmed": self._fake}, clear=True):
+            res = self.digest.build(force=True, notify=False)
+        today = date.today().isoformat()
+        note = vault / "每日推送" / f"{today}.md"
+        self.assertTrue(note.exists())
+        self.assertEqual(res["obsidian_path"], str(note))
+        text = note.read_text(encoding="utf-8")
+        self.assertTrue(text.startswith("---\n"))
+        self.assertIn("type: digest", text)
+        self.assertIn("papers: 1", text)
+        self.assertIn("Photosystem I structure", text)
+        index = (vault / "首页.md").read_text(encoding="utf-8")
+        self.assertIn(f"[[每日推送/{today}|{today}]]", index)
+
+    def test_build_with_no_new_content_still_records(self):
+        with patch.dict(paper_sources.FETCHERS,
+                        {"pubmed": lambda *a, **k: []}, clear=True):
+            res = self.digest.build(force=True, notify=False)
+        self.assertEqual(res["counts"]["papers"], 0)
+        self.assertEqual(res["item_id"], "")
+        self.assertIsNotNone(self.store.get_digest(date.today().isoformat()))
+        self.assertIn("没有新的匹配论文", Path(res["path"]).read_text(encoding="utf-8"))
+
+
 class ApiTests(unittest.TestCase):
     def test_health_and_items(self):
         import urllib.request
@@ -247,6 +333,9 @@ class ApiTests(unittest.TestCase):
         cfg.set("core.api_port", 0)
         engine = Engine(cfg)
         engine.store.create_item(title="api item", summary="", category="admin")
+        md = Path(tmp) / "digest.md"
+        md.write_text("# digest body", encoding="utf-8")
+        engine.store.record_digest("2026-01-01", "", str(md), {"counts": {"papers": 1}})
         httpd = serve(engine, host="127.0.0.1", port=0)
         port = httpd.server_address[1]
         th = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -258,6 +347,11 @@ class ApiTests(unittest.TestCase):
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/items", timeout=5) as r:
                 data = json.loads(r.read().decode())
             self.assertEqual(len(data["data"]), 1)
+            with urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/api/digest?date=2026-01-01", timeout=5) as r:
+                data = json.loads(r.read().decode())
+            self.assertTrue(data["data"]["exists"])
+            self.assertEqual(data["data"]["markdown"], "# digest body")
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as r:
                 html = r.read().decode()
             self.assertIn("SuperAgent", html)

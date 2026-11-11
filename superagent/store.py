@@ -133,12 +133,15 @@ class Store:
             r = c.execute("SELECT * FROM items WHERE id=?", (item_id,)).fetchone()
             return dict(r) if r else None
 
-    def items(self, status: str = "", limit: int = 200) -> list[dict]:
+    def items(self, status: str = "", limit: int = 200, category: str = "") -> list[dict]:
         q = "SELECT * FROM items WHERE 1=1"
         args = []
         if status:
             q += " AND status=?"
             args.append(status)
+        if category:
+            q += " AND category=?"
+            args.append(category)
         q += " ORDER BY priority ASC, created_at DESC LIMIT ?"
         args.append(limit)
         with self._conn() as c:
@@ -349,6 +352,53 @@ class Store:
         args.append(limit)
         with self._conn() as c:
             return [dict(r) for r in c.execute(q, args)]
+
+    # ---------------- digest ----------------
+    def digest_seen(self, kind: str, key: str, cooldown_days: float = 0) -> bool:
+        with self._conn() as c:
+            r = c.execute("SELECT last_seen FROM digest_seen WHERE kind=? AND key=?",
+                          (kind, key)).fetchone()
+        if not r:
+            return False
+        if cooldown_days <= 0:
+            return True
+        return r["last_seen"] >= util.utc_before(cooldown_days)
+
+    def clear_recent_digest_seen(self, days: float = 1) -> None:
+        with self._conn() as c:
+            c.execute("DELETE FROM digest_seen WHERE last_seen >= ?", (util.utc_before(days),))
+
+    def mark_digest_seen(self, kind: str, key: str) -> None:
+        now = util.utcnow()
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO digest_seen(kind,key,first_seen,last_seen,hits) VALUES(?,?,?,?,1)"
+                " ON CONFLICT(kind,key) DO UPDATE SET last_seen=excluded.last_seen,"
+                " hits=digest_seen.hits+1",
+                (kind, key, now, now),
+            )
+
+    def get_digest(self, date: str = "") -> dict | None:
+        with self._conn() as c:
+            if date:
+                r = c.execute("SELECT * FROM digests WHERE date=?", (date,)).fetchone()
+            else:
+                r = c.execute("SELECT * FROM digests ORDER BY date DESC LIMIT 1").fetchone()
+            return dict(r) if r else None
+
+    def digests(self, limit: int = 30) -> list[dict]:
+        with self._conn() as c:
+            return [dict(r) for r in c.execute(
+                "SELECT * FROM digests ORDER BY date DESC LIMIT ?", (limit,))]
+
+    def record_digest(self, date: str, item_id: str, path: str, stats: dict) -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO digests(date,item_id,path,stats_json,created_at) VALUES(?,?,?,?,?)"
+                " ON CONFLICT(date) DO UPDATE SET item_id=excluded.item_id,path=excluded.path,"
+                " stats_json=excluded.stats_json,created_at=excluded.created_at",
+                (date, item_id or None, path, util.json_dumps(stats), util.utcnow()),
+            )
 
     # ---------------- context ----------------
     def set_context(self, category: str, key: str, value: str, confidence: float = 0.6,

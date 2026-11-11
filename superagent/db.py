@@ -62,6 +62,13 @@ SCHEMA = [
     """CREATE TABLE IF NOT EXISTS collector_state(
         name TEXT PRIMARY KEY, last_run_at TEXT, last_ok_at TEXT, cursor_json TEXT,
         error TEXT, stats_json TEXT)""",
+    """CREATE TABLE IF NOT EXISTS digest_seen(
+        kind TEXT NOT NULL, key TEXT NOT NULL, first_seen TEXT NOT NULL,
+        last_seen TEXT NOT NULL, hits INTEGER NOT NULL DEFAULT 1,
+        PRIMARY KEY(kind,key))""",
+    """CREATE TABLE IF NOT EXISTS digests(
+        date TEXT PRIMARY KEY, item_id TEXT, path TEXT, stats_json TEXT,
+        created_at TEXT NOT NULL)""",
 ]
 
 

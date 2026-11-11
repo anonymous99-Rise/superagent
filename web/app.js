@@ -3,6 +3,7 @@
 const CATEGORY = {
   research: "研究", reading: "阅读", writing: "写作", coding: "编码", review: "评审",
   ops: "运维", communication: "沟通", calendar: "日程", admin: "事务", document: "文档",
+  digest: "推送",
 };
 const STATUS = {
   inbox: "待分诊", planned: "已规划", running: "执行中", needs_approval: "待确认",
@@ -12,7 +13,7 @@ const STATUS = {
 };
 const LEVEL = { 1: "L1", 2: "L2", 3: "L3", 4: "L4", 5: "L5" };
 
-const state = { view: "overview", itemFilter: "inbox", eventLevel: "", timer: null, busy: false };
+const state = { view: "overview", itemFilter: "inbox", eventLevel: "", digestDate: "", timer: null, busy: false };
 
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v == null ? "" : v)
@@ -52,6 +53,7 @@ function setSub(text) { $("#view-sub").textContent = text; }
 
 const TITLES = {
   overview: ["总览", "系统状态、Agent 与采集器概览"],
+  digest: ["每日推送", "每日论文、科研 Skills 与 GitHub 仓库推荐"],
   inbox: ["Inbox", "所有被发现的待办、问题、机会与决策点"],
   outbox: ["Outbox", "需要你确认后才会执行的对外动作"],
   tasks: ["任务", "子任务执行状态与产物"],
@@ -77,6 +79,7 @@ async function render() {
   state.busy = true;
   try {
     if (state.view === "overview") await renderOverview();
+    else if (state.view === "digest") await renderDigest();
     else if (state.view === "inbox") await renderInbox();
     else if (state.view === "outbox") await renderOutbox();
     else if (state.view === "tasks") await renderTasks();
@@ -167,6 +170,84 @@ async function renderOverview() {
         <div class="lvl ${esc(e.level)}">${esc(e.level)}</div>
         <div>${esc(short(e.message || e.action, 90))}</div></div>`).join("") : '<div class="muted small">暂无事件</div>';
   } catch (e) { /* ignore */ }
+}
+
+// ---------------- digest markdown ----------------
+function inlineMd(s) {
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, text, href) => {
+      const raw = href.replace(/&amp;/g, "&");
+      if (!/^https?:\/\//i.test(raw)) return text;
+      return `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
+    })
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
+function mdToHtml(md) {
+  const out = [];
+  let para = [], list = false, quote = [];
+  const flushPara = () => {
+    if (para.length) { out.push(`<p>${inlineMd(para.join(" "))}</p>`); para = []; }
+  };
+  const flushList = () => { if (list) { out.push("</ul>"); list = false; } };
+  const flushQuote = () => {
+    if (quote.length) { out.push(`<blockquote>${inlineMd(quote.join(" "))}</blockquote>`); quote = []; }
+  };
+  const flushAll = () => { flushPara(); flushList(); flushQuote(); };
+  for (const raw of String(md || "").split("\n")) {
+    const line = esc(raw.replace(/\s+$/, ""));
+    if (!line.trim()) { flushAll(); continue; }
+    const head = line.match(/^(#{1,4})\s+(.*)$/);
+    if (head) { flushAll(); out.push(`<h${head[1].length}>${inlineMd(head[2])}</h${head[1].length}>`); continue; }
+    if (/^---+$/.test(line.trim())) { flushAll(); out.push("<hr>"); continue; }
+    if (/^&gt;\s?/.test(line)) { flushPara(); flushList(); quote.push(line.replace(/^&gt;\s?/, "")); continue; }
+    const li = line.match(/^[-*]\s+(.*)$/);
+    if (li) {
+      flushPara(); flushQuote();
+      if (!list) { out.push("<ul>"); list = true; }
+      out.push(`<li>${inlineMd(li[1])}</li>`);
+      continue;
+    }
+    flushList(); flushQuote(); para.push(line);
+  }
+  flushAll();
+  return out.join("\n");
+}
+
+async function renderDigest() {
+  const list = await api("/api/digests?limit=21");
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const dates = list.map((d) => d.date);
+  if (!dates.includes(today)) dates.unshift(today);
+  if (!state.digestDate || !dates.includes(state.digestDate)) state.digestDate = dates[0];
+  const d = await api("/api/digest?date=" + encodeURIComponent(state.digestDate));
+  const chips = dates.map((x) => `
+    <button class="chip ${x === state.digestDate ? "active" : ""}" data-action="digest-date" data-date="${esc(x)}">
+      ${x === today ? "今日 · " : ""}${esc(x.slice(5))}</button>`).join("");
+  let body;
+  if (d.exists) {
+    const c = (d.stats && d.stats.counts) || {};
+    const errs = Object.keys((d.stats && d.stats.errors) || {}).length;
+    body = `
+      <div class="card digest-meta">
+        <span class="pill">论文 ${esc(c.papers || 0)}</span>
+        <span class="pill">Skills ${esc(c.skills || 0)}</span>
+        <span class="pill">仓库 ${esc(c.repos || 0)}</span>
+        ${errs ? `<span class="pill p2">数据源异常 ${errs}</span>` : ""}
+        <span class="muted small">生成于 ${fmtTime(d.digest.created_at)}</span>
+        ${d.item ? `<button class="btn small" data-action="detail" data-id="${esc(d.item.id)}">在 Inbox 查看</button>` : ""}
+        <a class="btn small" href="obsidian://open?vault=${encodeURIComponent("super建议")}">在 Obsidian 打开</a>
+        <button class="btn small" data-action="digest-run">重新生成</button>
+      </div>
+      <div class="card md">${mdToHtml(d.markdown || "")}</div>`;
+  } else {
+    body = `<div class="empty">这一天还没有推送。每天 ${esc("08:00")} 自动生成，也可以立即抓取：
+      <div style="margin-top:12px"><button class="btn primary" data-action="digest-run">立即生成</button></div></div>`;
+  }
+  $("#view-digest").innerHTML = `<div class="chips">${chips}</div>${body}`;
 }
 
 function itemCard(it) {
@@ -397,6 +478,17 @@ document.addEventListener("click", async (ev) => {
     if (act === "goto") switchView(el.dataset.view);
     else if (act === "filter") { state.itemFilter = el.dataset.status; render(); }
     else if (act === "event-filter") { state.eventLevel = el.dataset.level; render(); }
+    else if (act === "digest-date") { state.digestDate = el.dataset.date; render(); }
+    else if (act === "digest-run") {
+      state.busy = true;
+      try {
+        toast("正在抓取论文、Skills 与仓库…");
+        const r = await api("/api/digest/run", { method: "POST", body: { notify: true } });
+        state.digestDate = r.date || state.digestDate;
+        toast(`已生成：论文 ${r.counts.papers} · 技能 ${r.counts.skills} · 仓库 ${r.counts.repos}`);
+      } finally { state.busy = false; }
+      await render();
+    }
     else if (act === "detail") await openItem(id);
     else if (act === "task-detail") await openTask(id);
     else if (act === "run-logs") await openRunLogs(id);

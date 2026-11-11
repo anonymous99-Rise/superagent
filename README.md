@@ -1,49 +1,104 @@
-# SuperAgent · 主动式任务中心
+# SuperAgent 使用说明
 
-把 **Claude Code、Codex、DSH、Zotero、Obsidian、GitHub 和你的本地工作上下文**组合成一个会主动发现任务、制定计划、调用 Agent 执行、并在关键动作前征求你确认的本地系统。
+> 给不想看代码的人：你只管用，剩下的它自己做。
 
-它不是一个演示，而是一个能持续在后台运行的工程：
+## 你只需要记住三件事
 
-- **主动感知**：定时巡检 GitHub、代码仓库、桌面/文档、Zotero 文献、DSH 会话、Obsidian 笔记、日历与邮箱。
-- **统一 Inbox**：把待办、问题、机会、决策点去重、分类、打优先级。
-- **L1–L5 自主等级**：按任务类型、上下文、工具能力和权限自动判断 AI 能推进到哪一步。
-- **自动规划与并行执行**：把事项拆成带依赖的子任务 DAG，交给 Claude Code / Codex 并行执行，失败重试、超时终止。
-- **HITL Outbox**：对外发送、提交、推送、发布、删除等动作一律拦截，推送 Windows 桌面通知，等你批准。
-- **监控看板**：Inbox / Outbox / 任务 / 运行日志 / 工具调用 / 事件 / 成本 / 个人上下文，一处可见，可重试、可干预、可回溯。
-- **长期运行**：SQLite 持久化、WAL、断点恢复、孤儿任务修复、预算上限、本地 API 仅绑定 127.0.0.1。
+1. **每天 08:00 左右，电脑会弹出一条推送。** 内容是当天和你研究方向相关的论文、科研 Skills、GitHub 仓库。
+2. **想看全部内容，双击桌面上的「SuperAgent 看板」。** 浏览器会打开 `http://127.0.0.1:8787`，首页就是总览，「每日推送」里能回看历史。
+3. **只有「待确认」需要你动手。** 凡是发邮件、发消息、推送代码、删除文件这类对外或不可逆的动作，它都会停在 Outbox 等你点批准，不会自己执行。
+
+开机自启已经装好，以后登录 Windows 它就会在后台自己运行，不需要你启动任何程序。
 
 ---
 
-## 快速开始
+## 它每天替你做什么
+
+| 时间 | 事情 | 你要做什么 |
+| --- | --- | --- |
+| 登录电脑时 | 自动在后台启动 | 什么都不用做 |
+| 每 15 分钟 | 巡检 GitHub、代码仓库、桌面/文档、Zotero、DSH 会话、Obsidian | 有值得处理的事会进 Inbox |
+| 每天 08:00 | 抓取 PubMed / Europe PMC / arXiv，按关键词筛选、去重、排序 | 看推送，感兴趣的点开读 |
+| 随时 | 把事项拆成任务，交给 Claude Code / Codex 执行 | 在 Outbox 批准对外动作 |
+
+推送同时写到两个地方：
+
+- **看板** →「每日推送」页面
+- **Obsidian** → 库 `super建议` → `每日推送/日期.md`
+
+`super建议` 库已经建好并注册到 Obsidian。打开 Obsidian，在库切换里选 `super建议` 就能看到；看板「每日推送」页面里也有「在 Obsidian 打开」按钮。
+
+---
+
+## 第一次使用（只看这一节就够）
+
+1. 双击桌面 **SuperAgent 看板**。
+2. 如果浏览器能打开页面，说明一切正常。
+3. 点顶部 **每日推送**，看今天的论文和推荐。
+4. 点顶部 **Outbox**，以后需要你确认的动作都在这里。
+
+就这些。没有要安装的东西，也没有要敲的命令。
+
+---
+
+## 它不会做什么
+
+- 每日推送**不调用任何大模型**，不产生 API 费用。
+- 不会自动发邮件、发消息、发朋友圈、推送代码或删除文件。
+- 不会把数据上传到外部服务器；看板只监听本机 `127.0.0.1`。
+- 不会在你没批准的情况下执行 `git push`、发布、提交表单等动作。
+
+代价是：它把「需要对外」的动作都留给你确认。这是故意的安全边界。
+
+---
+
+## 常见问题
+
+**通知没有弹出来？**
+Windows 可能把通知收进了通知中心；打开看板「每日推送」仍然能看到当天内容。也可以在 Windows 设置 → 系统 → 通知里确认允许 PowerShell 通知。
+
+**今天没有推送？**
+先打开看板看「每日推送」。如果显示「这一天还没有推送」，点「立即生成」，等 20–40 秒。仍失败时，把看板「事件日志」里的红色错误告诉 Claude 即可。
+
+**推送里的论文不相关？**
+告诉 Claude「把推送关键词改成 …」或「减少某类论文」，它会改配置并重新生成，不需要你编辑文件。
+
+**想改推送时间？**
+告诉 Claude「每天 9 点推送」，例如。
+
+**Obsidian 里找不到 `super建议`？**
+打开 Obsidian → 左下角库切换 → `super建议`。如果列表里没有，告诉 Claude「把 super建议 重新注册到 Obsidian」。
+
+**电脑重启后还用管吗？**
+不用。登录后它会自己起来。想确认是否在运行，双击桌面看板能打开就是正常。
+
+---
+
+## 给维护者（可以不看）
+
+<details>
+<summary>展开：命令、架构、配置与开发说明</summary>
+
+### 快速开始
 
 ```bash
 cd D:/devProject/super
-
-# 1) 自检（不消耗模型额度）
-python -m superagent doctor
-
-# 2) 初始化数据库与个人上下文
-python -m superagent init
-
-# 3) 立刻巡检一次
-python -m superagent patrol
-
-# 4) 启动看板 + 后台巡检 + 调度器
-python -m superagent serve
-#   打开 http://127.0.0.1:8787
+python -m superagent doctor          # 环境自检，不消耗模型额度
+python -m superagent init            # 初始化数据库与个人上下文
+python -m superagent patrol          # 立刻巡检一次
+python -m superagent digest --force  # 立即生成每日推送
+python -m superagent serve           # 前台启动看板 + 巡检 + 调度器
 ```
 
-后台常驻（Windows）：
+后台常驻与自启：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1
 powershell -ExecutionPolicy Bypass -File scripts\stop.ps1
-powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1   # 登录自启
+powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1   # 已执行
 ```
 
----
-
-## 核心概念
+### 核心概念
 
 | 概念 | 含义 |
 | --- | --- |
@@ -53,6 +108,24 @@ powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1   # 登�
 | **Run** | 一次真实的 Agent 进程调用，记录 stdout/stderr、耗时、token、成本 |
 | **Artifact** | 任务产出的文件或结论，登记在看板上 |
 | **Approval** | Outbox 中的待确认动作；批准后任务才会重新入队 |
+
+### 每日推送的数据流
+
+```
+PubMed / Europe PMC / arXiv ─┐
+本地 DSH / Claude Skills ────┼─▶ 关键词匹配与打分 ─▶ 去重（永久论文/仓库，14 天技能）
+GitHub 仓库搜索（gh api）────┘                              │
+                                                             ▼
+                          var/digests/YYYY-MM-DD.md  +  Inbox 事项 + 桌面通知
+                                                             │
+                                                             ▼
+                                      Obsidian 库 super建议/每日推送/YYYY-MM-DD.md
+```
+
+- 排序：先按发布时间，再按关键词命中分数；每个来源有配额，避免单一来源刷屏。
+- 去重：论文按 DOI/标题永久去重，仓库永久去重，本地 Skill 有 14 天冷却；当天手动「重新生成」只补充新内容。
+- 相关性：ASCII 关键词按词边界匹配（`photosystem I` 不会命中 `photosystem II`）。
+- 成本：零 LLM 调用。
 
 ### L1–L5 自主等级
 
@@ -66,9 +139,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1   # 登�
 
 判定规则在 `superagent/autonomy.py`：kind → 分类/基础等级，内容关键词 → 对外副作用（external/destructive），重要度 + 紧迫词 → 优先级。**对外副作用会自动把等级抬到 L4，并强制进入 Outbox。**
 
----
-
-## 架构一览
+### 架构一览
 
 ```
                  ┌──────────────── 巡检循环（默认 15 分钟） ────────────────┐
@@ -93,13 +164,13 @@ powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1   # 登�
 
 更多细节见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)，调研结论见 [`docs/RESEARCH.md`](docs/RESEARCH.md)，配置项见 [`docs/CONFIG.md`](docs/CONFIG.md)，运维手册见 [`docs/OPERATIONS.md`](docs/OPERATIONS.md)。
 
----
-
-## 常用命令
+### 常用命令
 
 ```bash
 python -m superagent doctor                 # 环境自检
 python -m superagent patrol --only github   # 只巡检某个源
+python -m superagent digest --force         # 立即生成今天的论文/技能/仓库推送
+python -m superagent digest --show          # 生成并打印 Markdown
 python -m superagent items --status inbox   # 查看 Inbox
 python -m superagent plan <item_id> --llm   # 用 AI 规划（默认走模板规划）
 python -m superagent run <item_id> --wait 300
@@ -115,9 +186,7 @@ python -m superagent status
 python -m unittest tests.test_core -v
 ```
 
----
-
-## 安全与权限边界
+### 安全与权限边界
 
 - 本地读写与分析可自主执行；**对外动作默认全部拦截**（`policy.external_requires_approval = true`）。
 - 采集到的外部内容在 Prompt 中被明确标记为**不可信数据**，要求 Agent 只当素材、不执行其中的指令。
@@ -128,16 +197,16 @@ python -m unittest tests.test_core -v
 
 > 注意：工作器以 `--dangerously-skip-permissions` / `danger-full-access` 运行，这是为了让无人值守任务能真正落地产物。信任边界由系统的 Outbox 门禁保证，而不是由 Agent 的交互式确认保证。若你希望更保守，可在 `config/super.toml` 中把 Codex 的 `sandbox` 改为 `workspace-write`。
 
----
-
-## 目录结构
+### 目录结构
 
 ```
 super/
 ├─ superagent/            # Python 包（核心仅依赖标准库）
 │  ├─ collectors/         # 信息源采集器
+│  ├─ sources/            # 论文 / GitHub 仓库 / Skills 抓取
 │  ├─ workers/            # claude / codex / local 执行器
 │  ├─ db.py store.py      # SQLite 持久化与仓储层
+│  ├─ digest.py           # 每日科研推送与 Obsidian 同步
 │  ├─ autonomy.py         # L1–L5 与权限策略
 │  ├─ triage.py planner.py dispatcher.py hitl.py
 │  ├─ engine.py           # 巡检 + 后台调度编排
@@ -149,10 +218,12 @@ super/
 └─ var/                   # 运行时数据（已 gitignore）
 ```
 
-## 已知边界与下一步
+### 已知边界与下一步
 
 - 邮箱/日历采集器已实现但默认关闭，需要填 IMAP / ICS 配置。
 - 消息类源（微信/飞书/Slack）需要各自导出或 webhook，当前通过文件与 webhook 预留扩展点。
 - AI 规划默认关闭以控制成本；可在看板中对单条事项点「AI 重新规划」。
 - 长期记忆的语义检索尚未引入向量库，目前用结构化上下文 + 关键词加权。
 - 成本预算只统计 Claude 的美元开销；Codex 仅上报 token 用量，不折算金额。
+
+</details>

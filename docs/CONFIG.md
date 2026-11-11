@@ -148,6 +148,36 @@
 | `password_env` | `SUPER_EMAIL_PASSWORD` | 从该环境变量读取密码，**不要写进配置文件** |
 | `mailbox` / `limit` / `recency_days` | `INBOX` / `20` / `7` | 读取范围 |
 
+## [digest]
+
+每日论文 / 科研 Skills / GitHub 仓库推送。不调用大模型，无 API 成本。
+
+| 键 | 默认 | 说明 |
+| --- | --- | --- |
+| `enabled` | `true` | 是否启用后台每日推送 |
+| `time` | `08:00` | 本地时间；守护进程在到达该时间后生成当天推送 |
+| `notify` | `true` | 是否发 Windows Toast |
+| `lookback_days` | `7` | 论文时间窗口 |
+| `max_papers` / `max_per_source` | `8` / `4` | 总条数与单来源上限 |
+| `min_paper_score` | `3.0` | 最低相关分；标题命中 4、摘要命中 1.5 |
+| `sources` | `["pubmed","europepmc","arxiv"]` | 论文数据源，可增删 |
+| `keywords` | 课题关键词列表 | 建议包含 PSI/PsaE/cyanobacteria/plastid 等 |
+| `max_skills` | `4` | 本地技能推荐数（按名称前缀轮转） |
+| `skill_cooldown_days` | `14` | 同一技能再次推荐的冷却天数 |
+| `skill_dirs` | `~/.dsh/skills` 等 | 扫描 `SKILL.md` 的根目录 |
+| `max_github_skills` | `2` | GitHub 技能仓库推荐数 |
+| `github_skills_queries` | topic 搜索 | GitHub 技能仓库查询 |
+| `github_skills_keywords` | research/academic… | 技能仓库必须命中的语义词 |
+| `max_repos` / `min_repo_stars` | `5` / `10` | 仓库数量与最低星标 |
+| `repo_max_age_days` | `730` | 只看最近推送过的仓库 |
+| `repo_queries` | 7 条主题查询 | 每个查询单独调用 `gh api`，并行执行 |
+| `exclude_users` | 自己 | 排除自己的仓库 |
+| `blocked_repo_terms` | 盗版/影子图书馆等 | 命中即过滤 |
+| `obsidian_sync` | `true` | 是否把每天的推送同步进 Obsidian 库 |
+| `obsidian_vault` | `D:/devProject/super建议` | 目标库根目录；不存在会自动创建 `每日推送/` 与 `首页.md` |
+
+> `gh` 需要已登录（`gh auth status`）。技能仓库查询与普通仓库查询共用 GitHub Search 速率限制；默认每天约 10 次请求，远低于限额。
+
 ## API 令牌（可选）
 
 在 `[core]` 增加 `api_token = "..."` 后，所有 `/api/*` 请求必须携带令牌，二选一：
