@@ -128,6 +128,30 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(a, b)
 
 
+class WorkerArgvTests(unittest.TestCase):
+    def test_codex_danger_full_access_bypasses_approval_prompts(self):
+        from superagent.workers.codex import CodexWorker
+
+        cfg = Config()
+        cfg.set("workers.codex.command", "C:/fake/codex.exe")
+        cfg.set("workers.codex.sandbox", "danger-full-access")
+        argv = CodexWorker(cfg).build_argv("hi", "C:/ws")
+        self.assertIn("--dangerously-bypass-approvals-and-sandbox", argv)
+        self.assertNotIn("-s", argv)
+        self.assertEqual(argv[-1], "hi")
+
+    def test_codex_sandbox_mode_is_passed_when_not_full_access(self):
+        from superagent.workers.codex import CodexWorker
+
+        cfg = Config()
+        cfg.set("workers.codex.command", "C:/fake/codex.exe")
+        cfg.set("workers.codex.sandbox", "workspace-write")
+        argv = CodexWorker(cfg).build_argv("hi", "C:/ws")
+        self.assertIn("-s", argv)
+        self.assertIn("workspace-write", argv)
+        self.assertNotIn("--dangerously-bypass-approvals-and-sandbox", argv)
+
+
 class DispatcherTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

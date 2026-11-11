@@ -32,7 +32,11 @@ class CodexWorker(Worker):
         if last_msg:
             argv += ["-o", last_msg]
         sandbox = (extra or {}).get("sandbox") or conf.get("sandbox") or "danger-full-access"
-        argv += ["-s", sandbox]
+        if sandbox == "danger-full-access":
+            # unattended runs have no console to answer approval prompts
+            argv.append("--dangerously-bypass-approvals-and-sandbox")
+        else:
+            argv += ["-s", sandbox]
         if conf.get("model"):
             argv += ["-m", conf["model"]]
         argv += list(conf.get("extra_args") or [])
@@ -64,10 +68,9 @@ class CodexWorker(Worker):
                 errors.append(json.dumps(ev, ensure_ascii=False)[:500])
         text = "\n".join(texts).strip()
         if not text:
-            return WorkerResult(
-                ok=False, error=util.truncate("\n".join(errors) or stderr or f"codex exit {rc}", 1000),
-                stdout=stdout, usage=usage,
-            )
+            # CLI failures land at the end of stderr; the head is usually config warnings
+            detail = "\n".join(errors) or (stderr or "")[-1200:] or f"codex exit {rc}"
+            return WorkerResult(ok=False, error=util.truncate(detail, 1000), stdout=stdout, usage=usage)
         res = self._structured(text)
         res.usage.update(usage)
         if rc != 0 and not errors:
