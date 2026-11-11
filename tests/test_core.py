@@ -208,6 +208,14 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(len(self.store.approvals(status="pending")), 1)
         self.assertEqual(self.store.get_item(iid)["status"], "needs_approval")
 
+    def test_orphan_repair_marks_task_failed_and_refreshes_item(self):
+        iid = self.store.create_item(title="x", summary="", category="admin")
+        tid = self.store.create_task(item_id=iid, title="t", kind="noop", agent="local", prompt="p")
+        self.store.claim_task(tid)
+        self.engine.dispatcher.repair_orphans()
+        self.assertEqual(self.store.get_task(tid)["status"], "failed")
+        self.assertEqual(self.store.get_item(iid)["status"], "failed")
+
     def test_failure_and_retry(self):
         iid = self.store.create_item(title="x", summary="", category="admin")
         tid = self.store.create_task(item_id=iid, title="verify", kind="verify", agent="local",

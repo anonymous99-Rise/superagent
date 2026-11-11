@@ -26,6 +26,7 @@ class Dispatcher:
     # ---------------- lifecycle ----------------
     def repair_orphans(self) -> None:
         """Recover tasks/runs left running by a previous process. Only the owning daemon calls this."""
+        touched = set()
         for t in self.store.tasks(status="running"):
             f = self._futures.get(t["id"])
             if f is None or (hasattr(f, "done") and f.done()):
@@ -33,10 +34,14 @@ class Dispatcher:
                                        error="interrupted (process restart)")
                 self.store.log("warn", "task.orphan_repaired", t["title"], entity_type="task",
                                entity_id=t["id"])
+                if t.get("item_id"):
+                    touched.add(t["item_id"])
         for r in self.store.runs(limit=500):
             if r["status"] == "running":
                 self.store.finish_run(r["id"], status="interrupted",
                                       error="process restarted while running")
+        for item_id in touched:
+            self._refresh_item(item_id)
 
     def shutdown(self) -> None:
         self._stop.set()
