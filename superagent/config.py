@@ -30,6 +30,8 @@ DEFAULTS: dict = {
         "default_timeout_sec": 900,
         "max_attempts": 2,
         "auto_plan": True,
+        "auto_plan_per_cycle": 2,
+        "max_pending_backlog": 12,
         "auto_run_max_level": 4,
         "daily_cost_budget_usd": 5.0,
     },

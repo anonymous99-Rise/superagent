@@ -37,6 +37,7 @@
 | `max_attempts` | `2` | 默认最大尝试次数（含首次） |
 | `auto_plan` | `true` | 是否自动规划高优先级事项 |
 | `auto_plan_per_cycle` | `2` | 每轮巡检最多自动规划数量 |
+| `max_pending_backlog` | `12` | 待执行任务达到该数量时暂停自动规划，防止离线堆积 |
 | `auto_run_max_level` | `4` | 允许自动执行的最高自主等级 |
 | `daily_cost_budget_usd` | `5.0` | 每日 Agent 成本上限，超出即停止派发 |
 

@@ -22,6 +22,7 @@ class Dispatcher:
         self._futures: dict[str, object] = {}
         self._lock = threading.Lock()
         self._stop = threading.Event()
+        self._budget_warned_at = 0.0
 
     # ---------------- lifecycle ----------------
     def repair_orphans(self) -> None:
@@ -52,7 +53,7 @@ class Dispatcher:
         """One scheduling pass: finalize finished, dispatch ready tasks."""
         self._reap()
         dispatched = 0
-        if not self._budget_ok():
+        if not self.budget_ok():
             return {"dispatched": 0, "reason": "daily cost budget exhausted"}
         running = len([f for f in self._futures.values() if not f.done()])
         slots = max(0, self.max_parallel - running)
@@ -120,15 +121,18 @@ class Dispatcher:
                     self.store.log("error", "task.future_error", str(e), entity_type="task",
                                    entity_id=tid)
 
-    def _budget_ok(self) -> bool:
+    def budget_ok(self) -> bool:
         budget = float(self.cfg.get("policy.daily_cost_budget_usd", 0) or 0)
         if budget <= 0:
             return True
         cost = self.store.today_cost()
-        if cost >= budget:
-            self.store.log("warn", "budget.exceeded", f"今日成本 ${cost} ≥ 预算 ${budget}")
-            return False
-        return True
+        if cost < budget:
+            return True
+        now = time.time()
+        if now - self._budget_warned_at > 1800:
+            self._budget_warned_at = now
+            self.store.log("warn", "budget.exceeded", f"今日成本 ${cost:.4f} ≥ 预算 ${budget:.2f}，暂停派发")
+        return False
 
     # ---------------- execution ----------------
     def _execute(self, task_id: str, run_id: str, attempt: int) -> None:

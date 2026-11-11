@@ -17,6 +17,7 @@ destructive_requires_approval = true
 max_parallel_tasks = 3
 auto_plan = true
 auto_plan_per_cycle = 2
+max_pending_backlog = 12
 auto_run_max_level = 4
 daily_cost_budget_usd = 5.0
 

@@ -80,6 +80,11 @@ class Engine:
     def auto_plan(self) -> int:
         if not bool(self.cfg.get("policy.auto_plan", True)):
             return 0
+        if not self.dispatcher.budget_ok():
+            return 0
+        backlog = int(self.cfg.get("policy.max_pending_backlog", 12))
+        if self.store.task_counts().get("pending", 0) >= backlog:
+            return 0
         limit = int(self.cfg.get("policy.auto_plan_per_cycle", 2))
         candidates = [
             it for it in self.store.items(status="inbox", limit=50)

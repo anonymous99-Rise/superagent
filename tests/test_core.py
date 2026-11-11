@@ -208,6 +208,17 @@ class DispatcherTests(unittest.TestCase):
         self.assertEqual(len(self.store.approvals(status="pending")), 1)
         self.assertEqual(self.store.get_item(iid)["status"], "needs_approval")
 
+    def test_auto_plan_pauses_when_backlog_full(self):
+        self.cfg.set("policy.auto_plan", True)
+        self.cfg.set("policy.max_pending_backlog", 2)
+        backlog = self.store.create_item(title="backlog", summary="", category="admin")
+        for i in range(2):
+            self.store.create_task(item_id=backlog, title=f"t{i}", kind="noop", agent="local", prompt="p")
+        target = self.store.create_item(title="new", summary="", category="reading",
+                                        priority=1, autonomy_level=3)
+        self.assertEqual(self.engine.auto_plan(), 0)
+        self.assertEqual(self.store.tasks(item_id=target), [])
+
     def test_orphan_repair_marks_task_failed_and_refreshes_item(self):
         iid = self.store.create_item(title="x", summary="", category="admin")
         tid = self.store.create_task(item_id=iid, title="t", kind="noop", agent="local", prompt="p")
